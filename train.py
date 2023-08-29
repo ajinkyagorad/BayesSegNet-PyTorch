@@ -1,9 +1,11 @@
+# Codebase pulled from : https://github.com/NiuJ1ao/BayesSegNet-PyTorch
+
 import torch
 import segnet
 import argparse
 import numpy as np
 from torch import nn
-from camvid import CamVid
+from seacamvid import SeaCamVid
 from copy import deepcopy
 from torch.optim import AdamW, SGD
 import matplotlib.pyplot as plt
@@ -13,6 +15,8 @@ from utils import PILToLongTensor, to_numpy, median_freq_balancing
 from torchmetrics import Accuracy, JaccardIndex
 torch.autograd.set_detect_anomaly(True) 
 
+
+# python train.py --data-path <Path to CamVid dataset> --device <cpu|cuda:x>
 def train_step(model, dataloader, optimizer, criterion, device):
     logs = []
     model.train()
@@ -84,11 +88,11 @@ def main(args):
         PILToLongTensor()
     ])
 
-    train_data = CamVid(data_root, "train", transform=transform, target_transform=target_transform)
+    train_data = SeaCamVid(data_root, "train", transform=transform, target_transform=target_transform)
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
-    val_data = CamVid(data_root, "val", transform=transform, target_transform=target_transform)
+    val_data = SeaCamVid(data_root, "val", transform=transform, target_transform=target_transform)
     val_loader = DataLoader(val_data, batch_size=batch_size)
-    test_data = CamVid(data_root, "test", transform=transform, target_transform=target_transform)
+    test_data = SeaCamVid(data_root, "test", transform=transform, target_transform=target_transform)
     test_loader = DataLoader(test_data, batch_size=batch_size)
 
     # # weights are copied from https://github.com/alexgkendall/SegNet-Tutorial
@@ -96,18 +100,19 @@ def main(args):
     #     [0.2595, 0.1826, 4.5640, 0.1417, 0.9051, 0.3826, 
     #      9.6446, 1.8418, 0.6823, 6.2478, 7.3614, 0.0], 
     #     device=device)
-    class_weights = median_freq_balancing(train_loader, 12, device=device)
+    num_classes = 13
+    class_weights = median_freq_balancing(train_loader, num_classes, device=device)
     class_weights[-1] = 0.0
     
-    model = segnet.BayesSegNet(in_channels=3, out_channels=12, vgg_encoder=True)
+    model = segnet.BayesSegNet(in_channels=3, out_channels=num_classes, vgg_encoder=True)
     model.to(device)
     print(model)
     # optimizer = AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
     optimizer = SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
-    criterion = nn.NLLLoss(weight=class_weights, ignore_index=11)
+    criterion = nn.NLLLoss(weight=class_weights, ignore_index=0)
     metrics = [
-        Accuracy(task="multiclass", num_classes=12, ignore_index=11, average="none").to(device),
-        JaccardIndex(task="multiclass", num_classes=12, ignore_index=11, average="none").to(device),
+        Accuracy(task="multiclass", num_classes=num_classes, ignore_index=0, average="none").to(device),
+        JaccardIndex(task="multiclass", num_classes=num_classes, ignore_index=0, average="none").to(device),
     ]
     train_logs, val_logs = [], []
     for i in range(epochs):
